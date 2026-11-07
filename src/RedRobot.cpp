@@ -471,7 +471,6 @@ void SetServo(uint8_t s, int16_t angle) {
 
 void ReadLineSensor(uint16_t values[6]) {
     LineSensors::read(values);
-
 }
 
 void StartRemoteControl() {
