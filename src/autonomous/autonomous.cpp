@@ -32,6 +32,7 @@ unsigned long stepStartedAt = 0;
 size_t parkingStepIndex = 0;
 bool parkingStepStarted = false;
 std::atomic<bool> startRequested{false};
+std::atomic<bool> driverControlRequested{false};
 
 const char *StateName(State value) {
   switch (value) {
@@ -41,6 +42,7 @@ const char *StateName(State value) {
     case State::Parking: return "parking";
     case State::Complete: return "complete";
     case State::DriverControl: return "driver control";
+    case State::CalibrateTape: return "calibrate tape";
   }
   return "unknown";
 }
@@ -100,12 +102,17 @@ void Init() {
   parkingStepIndex = 0;
   parkingStepStarted = false;
   startRequested.store(false);
+  driverControlRequested.store(false);
   RedRobot::SetStateDigit(static_cast<uint8_t>(state));
   Serial.printf("Autonomous state: %s\n", StateName(state));
 }
 
 void RequestStart() {
   startRequested.store(true);
+}
+
+void RequestDriverControl() {
+  driverControlRequested.store(true);
 }
 
 State CurrentState() {
@@ -115,11 +122,19 @@ State CurrentState() {
 void Update() {
   const unsigned long now = millis();
   const bool shouldStart = startRequested.exchange(false);
+  const bool shouldTakeOver = driverControlRequested.exchange(false);
   if (RedRobot::IsRemoteControlled()) {
+    Enter(State::DriverControl);
+  } else if (shouldTakeOver && state != State::Idle &&
+             state != State::DriverControl) {
+    Serial.println("Manual driver takeover requested");
+    RedRobot::StartRemoteControl();
     Enter(State::DriverControl);
   } else if (state == State::Idle && shouldStart) {
     autonomousStartedAt = now;
-    Enter(State::SearchTape);
+    Tape::Init();
+    Drive::Stop();
+    Enter(State::CalibrateTape);
   } else if (state != State::Idle &&
              now - autonomousStartedAt >= kAutonomousDurationMs) {
     FinishAutonomous();
@@ -127,6 +142,9 @@ void Update() {
 
   switch (state) {
     case State::Idle:
+      break;
+    case State::CalibrateTape:
+      if (Tape::Calibrate()) Enter(State::SearchTape);
       break;
     case State::SearchTape: {
       Tape::Sample sample;

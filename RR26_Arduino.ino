@@ -3,27 +3,34 @@
  */
 
 #include <Arduino.h> // keep this first
+#include "CONFIGURE-ME.h"
 #include "RedRobot.h"
 #include "src/autonomous/autonomous.h"
+#include "src/claw/claw.h"
 #include "src/drive/drive.h"
 #include "src/lift/lift.h"
 #include "src/tape/tape.h"
-
-// Set false to inspect tape readings without moving the robot.
-constexpr bool kEnableMovement = true;
-constexpr uint8_t kLiftServoIndex = 0;
-constexpr bool kLiftDirectionReversed = false;
-constexpr float kLiftFeedforward = 0.10f;
+#include "src/wrist/wrist.h"
 
 void setup() {
   RedRobot::InitRedRobot();
   RedRobot::InitDCMotors();
   RedRobot::InitServo();
-  Lift::Init(kLiftServoIndex, kLiftDirectionReversed, kLiftFeedforward);
+  Lift::Init(RobotConfig::kLiftServoIndex,
+             RobotConfig::kLiftDirectionReversed,
+             RobotConfig::kLiftFeedforward);
+  Claw::Init(RobotConfig::kClawServoIndex,
+             RobotConfig::kClawOpenAngle,
+             RobotConfig::kClawClosedAngle,
+             RobotConfig::kClawInitialAngle);
+  Wrist::Init(RobotConfig::kWristServoIndex,
+              RobotConfig::kWristUpAngle,
+              RobotConfig::kWristDownAngle,
+              RobotConfig::kWristInitialAngle);
   RedRobot::InitLineSensors();
   RedRobot::InitAuton();
   Tape::Init();
-  Drive::Init(kEnableMovement);
+  Drive::Init(RobotConfig::kEnableMovement);
   Autonomous::Init();
   Serial.println("Initialized.");
 }

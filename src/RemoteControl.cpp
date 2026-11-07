@@ -1,6 +1,8 @@
 #include "../RedRobot.h"
 #include "autonomous/autonomous.h"
+#include "claw/claw.h"
 #include "lift/lift.h"
+#include "wrist/wrist.h"
 
 bool useTankDrive = false; // set true to use separate joysticks for left/right motors
 
@@ -28,6 +30,14 @@ namespace Bluefruit
 
 namespace RR_Controller
 {
+  enum class ClawPosition { Initial, Open, Closed };
+  enum class WristPosition { Initial, Up, Down };
+
+  ClawPosition clawPosition = ClawPosition::Initial;
+  ClawPosition lastClawPosition = ClawPosition::Initial;
+  WristPosition wristPosition = WristPosition::Initial;
+  WristPosition lastWristPosition = WristPosition::Initial;
+
   void Joystick1(int8_t x, int8_t y)
   {
     if (!RedRobot::IsRemoteControlled())
@@ -67,25 +77,74 @@ namespace RR_Controller
       RedRobot::WriteDCMotor(3, y);
   }
 
+  void DPad_Pressed(button_t Button, bool buttonPressedDown)
+  {
+    if (!buttonPressedDown) return;
+
+    if (Button == UP && !RedRobot::IsRemoteControlled()) {
+      Autonomous::RequestStart();
+    } else if (Button == LEFT && !RedRobot::IsRemoteControlled()) {
+      Autonomous::RequestDriverControl();
+    }
+  }
+
   void ButtonX_Pressed(bool buttonPressedDown)
   {
-    // Manual driver takeover before autonomous completes.
-    if (buttonPressedDown && !RedRobot::IsRemoteControlled())
-      RedRobot::StartRemoteControl();
+    if (!buttonPressedDown) return;
+
+    if (lastClawPosition == ClawPosition::Open) {
+      Claw::Close();
+      clawPosition = ClawPosition::Closed;
+    } else {
+      Claw::Open();
+      clawPosition = ClawPosition::Open;
+    }
+    lastClawPosition = clawPosition;
   }
 
   void ButtonY_Pressed(bool buttonPressedDown)
   {
-    // The state machine accepts this request only while idle.
-    if (buttonPressedDown && !RedRobot::IsRemoteControlled())
-      Autonomous::RequestStart();
+    if (!buttonPressedDown) return;
+
+    if (lastWristPosition == WristPosition::Up) {
+      Wrist::Down();
+      wristPosition = WristPosition::Down;
+    } else {
+      Wrist::Up();
+      wristPosition = WristPosition::Up;
+    }
+    lastWristPosition = wristPosition;
   }
 
   void ButtonB_Pressed(bool buttonPressedDown)
   {
+    if (!buttonPressedDown) return;
+
+    if (clawPosition != ClawPosition::Initial) {
+      Claw::GoToInitial();
+      clawPosition = ClawPosition::Initial;
+    } else if (lastClawPosition == ClawPosition::Open) {
+      Claw::Open();
+      clawPosition = ClawPosition::Open;
+    } else if (lastClawPosition == ClawPosition::Closed) {
+      Claw::Close();
+      clawPosition = ClawPosition::Closed;
+    }
   }
 
   void ButtonA_Pressed(bool buttonPressedDown)
   {
+    if (!buttonPressedDown) return;
+
+    if (wristPosition != WristPosition::Initial) {
+      Wrist::GoToInitial();
+      wristPosition = WristPosition::Initial;
+    } else if (lastWristPosition == WristPosition::Up) {
+      Wrist::Up();
+      wristPosition = WristPosition::Up;
+    } else if (lastWristPosition == WristPosition::Down) {
+      Wrist::Down();
+      wristPosition = WristPosition::Down;
+    }
   }
 }

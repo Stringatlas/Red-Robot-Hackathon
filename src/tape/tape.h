@@ -13,8 +13,12 @@ struct Sample {
   float positionMm;
 };
 
-// Reset the running sensor statistics.
+// Reset calibration and running sensor statistics.
 void Init();
+
+// Call once per update while stationary and centered on tape. Returns true
+// after a usable ground/tape distribution has been collected.
+bool Calibrate();
 
 // Read the sensors and estimate tape position relative to the array center.
 void Read(Sample &sample);
