@@ -22,6 +22,7 @@
 #define VOLTAGE_BUF_SIZE 60
 
 static std::atomic<bool> in_remote_control{false};
+static std::atomic<uint8_t> displayedStateDigit{0};
 static SemaphoreHandle_t actuatorMutex = nullptr;
 static TaskHandle_t arduinoLoopTask = nullptr;
 
@@ -220,17 +221,13 @@ namespace Display {
     spi_write(0x0F, 0x00); // display Test off
   }
 
-  void show(uint16_t value) {
-    // Clamp from 0 to 999
-    if (value > 999)
-      value = 999;
-    uint8_t digit1 = value / 100;
-    uint8_t digit2 = (value / 10) % 10;
-    uint8_t digit3 = value % 10;
-    //setup_display();
-    show_digit(1, digit1, true); // decimal point
-    show_digit(2, digit2, false);
-    show_digit(3, digit3, false);
+  void show(uint16_t voltageTenths, uint8_t stateDigit) {
+    // Display layout: [volts].[tenths][state 0-9].
+    // The rightmost digit is reserved for the robot state, not voltage.
+    if (voltageTenths > 99) voltageTenths = 99;
+    show_digit(1, voltageTenths / 10, true);
+    show_digit(2, voltageTenths % 10, false);
+    show_digit(3, stateDigit, false);
   }
 
   void init() {
@@ -239,7 +236,7 @@ namespace Display {
     // no MISO since the driver chip doesn't talk back
     spi.begin(BMS_CLK, -1, BMS_SDI, BMS_LOAD);
     setup_display();
-    show(0);               // initialize with 0.00
+    show(0, 0); // initialize with 0.0 V and state 0
   }
 } // namespace Display
 
@@ -252,12 +249,13 @@ void batteryLevelTask(void *) {
         static_cast<uint16_t>((Battery::read() * 100.0f) + 0.5f);
     index = (index + 1) % VOLTAGE_BUF_SIZE;
 
-    uint16_t val = 0;
+    uint32_t sumCentivolts = 0;
     for (int i = 0; i < VOLTAGE_BUF_SIZE; i++)
-      val += voltage_buf[i];
-    val /= VOLTAGE_BUF_SIZE;
+      sumCentivolts += voltage_buf[i];
 
-    Display::show(val);
+    const uint16_t voltageTenths =
+        (sumCentivolts + 5 * VOLTAGE_BUF_SIZE) / (10 * VOLTAGE_BUF_SIZE);
+    Display::show(voltageTenths, displayedStateDigit.load());
   }
 }
 
@@ -441,6 +439,10 @@ void InitAuton() {
   Serial.println("[INIT] AutonomousLoop will run from the Arduino loop task");
 }
 
+void SetStateDigit(uint8_t digit) {
+  if (digit <= 9) displayedStateDigit.store(digit);
+}
+
 /**
  * @brief Drive a certain motor at a certain speed (-100, 100)
  */
@@ -461,10 +463,6 @@ static void Brake() {
 
 void SetServo(uint8_t s, int16_t angle) {
     if (actuatorMutex) xSemaphoreTake(actuatorMutex, portMAX_DELAY);
-    if (in_remote_control.load() && xTaskGetCurrentTaskHandle() == arduinoLoopTask) {
-      if (actuatorMutex) xSemaphoreGive(actuatorMutex);
-      return;
-    }
     Servo::set(Servo::SERVO(s), angle);
     if (actuatorMutex) xSemaphoreGive(actuatorMutex);
 }
@@ -474,7 +472,11 @@ void ReadLineSensor(uint16_t values[6]) {
 }
 
 void StartRemoteControl() {
+    if (actuatorMutex) xSemaphoreTake(actuatorMutex, portMAX_DELAY);
     in_remote_control.store(true);
+    DCMotor::write(DCMotor::MOTOR_2, 0);
+    DCMotor::write(DCMotor::MOTOR_3, 0);
+    if (actuatorMutex) xSemaphoreGive(actuatorMutex);
 }
 
 bool IsRemoteControlled() {
@@ -486,8 +488,7 @@ bool IsRemoteControlled() {
 void loop() {
   arduinoLoopTask = xTaskGetCurrentTaskHandle();
 
-  if (!in_remote_control.load())
-    AutonomousLoop();
+  AutonomousLoop();
 
   // Give equal-priority tasks on this core (batteryLevelTask) time.
   taskYIELD();

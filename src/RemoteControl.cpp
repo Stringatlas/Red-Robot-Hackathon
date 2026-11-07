@@ -1,86 +1,20 @@
 #include "../RedRobot.h"
+#include "autonomous/autonomous.h"
+#include "lift/lift.h"
 
-bool useTankDrive = false;
+bool useTankDrive = false; // set true to use separate joysticks for left/right motors
 
 namespace Bluefruit
 {
-  /* DPad_Pressed is called everytime a D-Pad button is pressed or released.
-   *
-   * Only activates after RedRobot::StartRemoteControl() is called.
-   * Button is one of {UP = 0, DOWN = 1, LEFT = 2, RIGHT = 3}
-   */
-  void DPad_Pressed(button_t Button, bool buttonPressedDown)
-  {
-    if (!RedRobot::IsRemoteControlled())
-      return;
-
-    // values stay the same between calls to DPad_Pressed
-    static bool button_pressed[4] = {false, false, false, false};
-
-    button_pressed[Button] = (buttonPressedDown == true);
-
-    // TODO: edit your speed output to the yellow motors below!
-    // stop = 0, slow = 50, fast = 100
-    // range [-100,100]
-
-    int left_speed = 0;
-    int right_speed = 0;
-
-    if (button_pressed[UP])
-    { // Forward
-      left_speed += 100;
-      right_speed += 100;
-    }
-    if (button_pressed[DOWN])
-    { // Backward
-      left_speed -= 100;
-      right_speed -= 100;
-    }
-    if (button_pressed[LEFT])
-    { // Turn left_speed
-      left_speed -= 50;
-      right_speed += 50;
-    }
-    if (button_pressed[RIGHT])
-    { // Turn right_speed
-      left_speed += 50;
-      right_speed -= 50;
-    }
-
-    // Clamp and write speeds
-    RedRobot::WriteDCMotor(2, constrain(left_speed, -100, 100));
-    RedRobot::WriteDCMotor(3, constrain(right_speed, -100, 100));
-  }
-
   void Button1_Pressed(bool buttonPressedDown)
   {
-    if (!RedRobot::IsRemoteControlled() && buttonPressedDown)
-    {
-      RedRobot::StartRemoteControl();
-
-      // start remote controlled with the DC motors off
-      RedRobot::WriteDCMotor(2, 0);
-      RedRobot::WriteDCMotor(3, 0);
-    }
+    // Button 1 starts the 20-second autonomous period from idle.
+    if (buttonPressedDown && !RedRobot::IsRemoteControlled())
+      Autonomous::RequestStart();
   }
 
   void Button2_Pressed(bool buttonPressedDown)
   {
-    // Ex: move an arm when the button is pressed
-    if (buttonPressedDown)
-    {
-      RedRobot::SetServo(0, 180);
-      RedRobot::SetServo(1, 180);
-      RedRobot::SetServo(2, 180);
-      RedRobot::SetServo(3, 180);
-    }
-    else
-    {
-      RedRobot::SetServo(0, 0);
-      RedRobot::SetServo(1, 0);
-      RedRobot::SetServo(2, 0);
-      RedRobot::SetServo(3, 0);
-    }
   }
 
   void Button3_Pressed(bool buttonPressedDown)
@@ -96,6 +30,9 @@ namespace RR_Controller
 {
   void Joystick1(int8_t x, int8_t y)
   {
+    if (!RedRobot::IsRemoteControlled())
+      return;
+
     if (useTankDrive)
       RedRobot::WriteDCMotor(2, y);
     else
@@ -118,72 +55,30 @@ namespace RR_Controller
 
   void Joystick2(int8_t x, int8_t y)
   {
+    // Joystick Y is roughly -100 to 100; zero keeps the gravity feedforward.
+    const float liftPower = constrain(y / 100.0f, -1.0f, 1.0f);
+    Lift::SetPower(liftPower);
+    Serial.printf("[RR joystick 2] lift power %.2f\n", liftPower);
+
+    if (!RedRobot::IsRemoteControlled())
+      return;
+
     if (useTankDrive)
       RedRobot::WriteDCMotor(3, y);
   }
 
-  /* DPad_Pressed is called everytime a D-Pad button is pressed or released.
-   *
-   * Only activates after RedRobot::StartRemoteControl() is called.
-   * Button is one of {UP = 0, DOWN = 1, LEFT = 2, RIGHT = 3, CENTER = 4}
-   */
-  void DPad_Pressed(button_t Button, bool buttonPressedDown)
-  {
-    // values stay the same between calls to DPad_Pressed
-    static bool button_pressed[5] = {false, false, false, false, false};
-
-    button_pressed[Button] = (buttonPressedDown == true);
-
-    // TODO: edit your speed output to the yellow motors below!
-    // stop = 0, slow = 50, fast = 100
-    // range [-100,100]
-
-    int left_speed = 0;
-    int right_speed = 0;
-
-    if (button_pressed[UP])
-    { // Forward
-      left_speed += 100;
-      right_speed += 100;
-    }
-    if (button_pressed[DOWN])
-    { // Backward
-      left_speed -= 100;
-      right_speed -= 100;
-    }
-    if (button_pressed[LEFT])
-    { // Turn left_speed
-      left_speed -= 50;
-      right_speed += 50;
-    }
-    if (button_pressed[RIGHT])
-    { // Turn right_speed
-      left_speed += 50;
-      right_speed -= 50;
-    }
-
-    // Clamp and write speeds
-    RedRobot::WriteDCMotor(2, constrain(left_speed, -100, 100));
-    RedRobot::WriteDCMotor(3, constrain(right_speed, -100, 100));
-  }
-
   void ButtonX_Pressed(bool buttonPressedDown)
   {
-    if (!RedRobot::IsRemoteControlled() && buttonPressedDown)
-    {
+    // Manual driver takeover before autonomous completes.
+    if (buttonPressedDown && !RedRobot::IsRemoteControlled())
       RedRobot::StartRemoteControl();
-
-      // start remote controlled with the DC motors off
-      RedRobot::WriteDCMotor(2, 0);
-      RedRobot::WriteDCMotor(3, 0);
-    }
   }
 
   void ButtonY_Pressed(bool buttonPressedDown)
   {
-    Serial.printf("Y pressed\n");
-    if (buttonPressedDown)
-      useTankDrive = !useTankDrive;
+    // The state machine accepts this request only while idle.
+    if (buttonPressedDown && !RedRobot::IsRemoteControlled())
+      Autonomous::RequestStart();
   }
 
   void ButtonB_Pressed(bool buttonPressedDown)

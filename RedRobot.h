@@ -11,6 +11,12 @@ void InitLineSensors();
 void InitAuton();
 
 /**
+ * @brief Set the rightmost display digit to a robot state number (0-9).
+ * The first two digits continue to show battery voltage to 0.1 V.
+ */
+void SetStateDigit(uint8_t digit);
+
+/**
  * @brief Drive motor 0, 2, or 3 at a certain speed (from -100 to 100). Must call InitDCMotor before using.
  */
 void WriteDCMotor(uint8_t d, int16_t speed);
@@ -38,7 +44,7 @@ void SetServo(uint8_t s, int16_t angle);
 void ReadLineSensor(uint16_t values[6]);
 
 /**
- * @brief Start receiving commands from the remote control and stop the autonomous loop.
+ * @brief Switch to driver control and stop the autonomous drive motors.
  */
 void StartRemoteControl();
 
