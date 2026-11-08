@@ -16,8 +16,8 @@ bool ValidAngle(int16_t angle) {
 }
 
 void SetAngle(int16_t angle) {
-  // SetServo(0) is a 1500 us pulse; standard servo 90 degrees is 1500 us.
-  RedRobot::SetServo(servoIndex, angle - 90);
+  // Map 0-180 degrees to the driver's full -180 to 180 range (500-2500 us).
+  RedRobot::SetServo(servoIndex, 2 * angle - 180);
   position = angle;
 }
 

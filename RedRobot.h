@@ -27,7 +27,7 @@ void WriteDCMotor(uint8_t d, int16_t speed);
 static void Brake();
 
 /**
- * @brief Set servo 0, 1, 2, or 3 to the specified angle (0 to 180). Must call InitServo before using.
+ * @brief Set servo 0, 1, 2, or 3 to a driver value from -180 to 180 (500 to 2500 us). Must call InitServo before using.
  */
 void SetServo(uint8_t s, int16_t angle);
 
@@ -67,6 +67,7 @@ namespace Bluefruit {
   void Button2_Pressed(bool buttonPressedDown);
   void Button3_Pressed(bool buttonPressedDown);
   void Button4_Pressed(bool buttonPressedDown);
+  void PrintCalibrationTelemetry();
 }
 
 namespace RR_Controller {

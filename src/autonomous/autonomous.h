@@ -18,11 +18,17 @@ enum class State : uint8_t {
   CalibrateTape = 6,
 };
 
-// Initialize in idle; the 20-second timer starts on RR Y or Bluefruit Button 1.
+enum class Routine : uint8_t {
+  Up,
+  Down,
+};
+
+// Initialize in idle. The selected routine's timer starts when tape is found
+// and the robot enters FollowTape.
 void Init();
 
 // Safe to call from the remote-control task; requests outside Idle are ignored.
-void RequestStart();
+void RequestStart(Routine routine);
 
 // Request a manual takeover while an autonomous run is active.
 void RequestDriverControl();

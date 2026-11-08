@@ -9,9 +9,9 @@
 namespace Autonomous {
 namespace {
 
-constexpr unsigned long kAutonomousDurationMs = 20000;
-constexpr unsigned long kEarliestTapeFinishMs = 15000;
-constexpr uint8_t kSearchMotorSpeed = 25;
+constexpr unsigned long kUpDurationMs = 5500;
+constexpr unsigned long kDownDurationMs = 3250;
+constexpr uint8_t kStraightMotorSpeed = 25;
 constexpr unsigned long kLoopDelayMs = 20;
 
 struct ParkingStep {
@@ -28,11 +28,14 @@ const ParkingStep kParkingSteps[] = {
 };
 
 State state = State::Idle;
-unsigned long autonomousStartedAt = 0;
+Routine activeRoutine = Routine::Up;
+unsigned long followingStartedAt = 0;
 unsigned long stepStartedAt = 0;
 size_t parkingStepIndex = 0;
 bool parkingStepStarted = false;
-std::atomic<bool> startRequested{false};
+// 0 = no request, 1 = UP, 2 = DOWN. The remote task only posts a request;
+// the Arduino loop owns all state transitions and motor commands.
+std::atomic<uint8_t> startRequested{0};
 std::atomic<bool> driverControlRequested{false};
 
 const char *StateName(State value) {
@@ -51,7 +54,10 @@ const char *StateName(State value) {
 void Enter(State next) {
   if (state == next) return;
   if (next == State::Parking || next == State::Complete) Drive::Stop();
-  if (next == State::FollowTape) Drive::ResetPid();
+  if (next == State::FollowTape) {
+    followingStartedAt = millis();
+    Drive::ResetPid();
+  }
   if (next == State::Parking) {
     parkingStepIndex = 0;
     parkingStepStarted = false;
@@ -95,21 +101,79 @@ void UpdateParking(unsigned long now) {
   }
 }
 
+void UpdateTapeRoutine(unsigned long now, unsigned long durationMs) {
+  // Calibration does not count toward the following deadline.
+  if (state == State::FollowTape &&
+      now - followingStartedAt >= durationMs) {
+    FinishAutonomous();
+    return;
+  }
+
+  switch (state) {
+    case State::CalibrateTape:
+      if (Tape::Calibrate()) Enter(State::FollowTape);
+      break;
+    case State::SearchTape: {
+      Tape::Sample sample;
+      Tape::Read(sample);
+      PrintTapeSample(sample);
+      if (sample.detected) {
+        Enter(State::FollowTape);
+        Drive::FollowTape(sample.positionMm);
+      } else {
+        Drive::SetTankSpeeds(kStraightMotorSpeed, kStraightMotorSpeed);
+      }
+      break;
+    }
+    case State::FollowTape: {
+      Tape::Sample sample;
+      Tape::Read(sample);
+      PrintTapeSample(sample);
+      if (sample.detected) {
+        Drive::FollowTape(sample.positionMm);
+        Serial.printf("Tape error: %.2f mm\n", sample.positionMm);
+      } else {
+        // Cross a gap or intersection without steering until tape returns.
+        Drive::SetTankSpeeds(kStraightMotorSpeed, kStraightMotorSpeed);
+      }
+      break;
+    }
+    case State::Parking:
+      UpdateParking(now);
+      break;
+    case State::Complete:
+      FinishAutonomous();
+      break;
+    case State::Idle:
+    case State::DriverControl:
+      break;
+  }
+}
+
+void UpdateUpRoutine(unsigned long now) {
+  UpdateTapeRoutine(now, kUpDurationMs);
+}
+
+void UpdateDownRoutine(unsigned long now) {
+  UpdateTapeRoutine(now, kDownDurationMs);
+}
+
 } // namespace
 
 void Init() {
   state = State::Idle;
-  autonomousStartedAt = 0;
+  activeRoutine = Routine::Up;
+  followingStartedAt = 0;
   parkingStepIndex = 0;
   parkingStepStarted = false;
-  startRequested.store(false);
+  startRequested.store(0);
   driverControlRequested.store(false);
   RedRobot::SetStateDigit(static_cast<uint8_t>(state));
   Serial.printf("Autonomous state: %s\n", StateName(state));
 }
 
-void RequestStart() {
-  startRequested.store(true);
+void RequestStart(Routine routine) {
+  startRequested.store(routine == Routine::Up ? 1 : 2);
 }
 
 void RequestDriverControl() {
@@ -122,7 +186,7 @@ State CurrentState() {
 
 void Update() {
   const unsigned long now = millis();
-  const bool shouldStart = startRequested.exchange(false);
+  const uint8_t requestedRoutine = startRequested.exchange(0);
   const bool shouldTakeOver = driverControlRequested.exchange(false);
   if (RedRobot::IsRemoteControlled()) {
     Enter(State::DriverControl);
@@ -131,57 +195,20 @@ void Update() {
     Serial.println("Manual driver takeover requested");
     RedRobot::StartRemoteControl();
     Enter(State::DriverControl);
-  } else if (state == State::Idle && shouldStart) {
-    autonomousStartedAt = now;
+  } else if (state == State::Idle && requestedRoutine != 0) {
+    activeRoutine = requestedRoutine == 1 ? Routine::Up : Routine::Down;
+    Serial.printf("Autonomous routine: %s\n",
+                  activeRoutine == Routine::Up ? "UP" : "DOWN");
     Tape::Init();
     Drive::Stop();
     Enter(State::CalibrateTape);
-  } else if (state != State::Idle &&
-             now - autonomousStartedAt >= kAutonomousDurationMs) {
-    FinishAutonomous();
   }
 
-  switch (state) {
-    case State::Idle:
-      break;
-    case State::CalibrateTape:
-      if (Tape::Calibrate()) Enter(State::SearchTape);
-      break;
-    case State::SearchTape: {
-      Tape::Sample sample;
-      Tape::Read(sample);
-      PrintTapeSample(sample);
-      if (sample.detected) {
-        Enter(State::FollowTape);
-        Drive::FollowTape(sample.positionMm);
-      } else {
-        Drive::SetTankSpeeds(kSearchMotorSpeed, kSearchMotorSpeed);
-      }
-      break;
-    }
-    case State::FollowTape: {
-      Tape::Sample sample;
-      Tape::Read(sample);
-      PrintTapeSample(sample);
-      if (sample.detected) {
-        Drive::FollowTape(sample.positionMm);
-        Serial.printf("Tape error: %.2f mm\n", sample.positionMm);
-      } else if (now - autonomousStartedAt >= kEarliestTapeFinishMs) {
-        FinishAutonomous();
-      } else {
-        // Cross an early gap or intersection without steering until tape returns.
-        Drive::SetTankSpeeds(kSearchMotorSpeed, kSearchMotorSpeed);
-      }
-      break;
-    }
-    case State::Parking:
-      UpdateParking(now);
-      break;
-    case State::Complete:
-      FinishAutonomous();
-      break;
-    case State::DriverControl:
-      break;
+  if (state != State::Idle && state != State::DriverControl) {
+    if (activeRoutine == Routine::Up)
+      UpdateUpRoutine(now);
+    else
+      UpdateDownRoutine(now);
   }
   delay(kLoopDelayMs);
 }

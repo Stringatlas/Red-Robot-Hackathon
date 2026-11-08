@@ -18,7 +18,17 @@ void setup() {
   RedRobot::InitServo();
   Lift::Init(RobotConfig::kLiftServoIndex,
              RobotConfig::kLiftDirectionReversed,
-             RobotConfig::kLiftFeedforward);
+             RobotConfig::kLiftFeedforward,
+             RobotConfig::kLiftNeutralAngle);
+  Claw::Init(RobotConfig::kClawServoIndex,
+             RobotConfig::kClawOpenAngle,
+             RobotConfig::kClawClosedAngle,
+             RobotConfig::kClawInitialAngle);
+  Wrist::Init(RobotConfig::kWristServoIndex,
+              RobotConfig::kWristUpAngle,
+              RobotConfig::kWristDownAngle,
+              RobotConfig::kWristInitialAngle);
+  Bluefruit::PrintCalibrationTelemetry();
   RedRobot::InitLineSensors();
   RedRobot::InitAuton();
   Tape::Init();

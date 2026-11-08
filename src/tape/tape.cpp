@@ -8,7 +8,7 @@ namespace {
 
 constexpr float kSensorSpacingMm = 9.525f;
 constexpr float kSensorFilterAlpha = 0.35f;
-constexpr uint8_t kCalibrationSamples = 24;
+constexpr uint8_t kCalibrationSamples = 2;
 constexpr float kMinimumContrastUs = 200.0f;
 constexpr float kMinimumVarianceScaleUs2 = 10000.0f;
 
@@ -122,18 +122,17 @@ bool Calibrate() {
   tapeCalibration.Add(raw[3]);
 
   if (++calibrationFrames < kCalibrationSamples) return false;
-  if (tapeCalibration.minimum <= groundCalibration.maximum +
-                                     kMinimumContrastUs) {
-    Serial.printf("Tape calibration retry: ground %u-%u us, tape %u-%u us\n",
-                  groundCalibration.minimum, groundCalibration.maximum,
-                  tapeCalibration.minimum, tapeCalibration.maximum);
-    Init();
-    return false;
-  }
-
   groundMaxReadingUs = groundCalibration.maximum;
-  tapeMinReadingUs = tapeCalibration.minimum;
-  tapeThresholdUs = (groundMaxReadingUs + tapeMinReadingUs) / 2.0f;
+  if (tapeCalibration.minimum > groundMaxReadingUs + kMinimumContrastUs) {
+    tapeMinReadingUs = tapeCalibration.minimum;
+    tapeThresholdUs = (groundMaxReadingUs + tapeMinReadingUs) / 2.0f;
+  } else {
+    // No tape under the center sensors at startup. Keep the ground baseline
+    // so a later, stronger tape reading can still be detected.
+    tapeMinReadingUs = groundMaxReadingUs + kMinimumContrastUs;
+    tapeThresholdUs = tapeMinReadingUs;
+    Serial.println("Tape calibration: no tape detected; driving straight until found");
+  }
   varianceScaleUs2 = max(kMinimumVarianceScaleUs2,
                          groundCalibration.Variance() +
                              tapeCalibration.Variance());

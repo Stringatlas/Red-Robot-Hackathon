@@ -315,29 +315,32 @@ namespace Bluefruit {
 
 namespace RR_Controller {
   bool Parse(char *buf, size_t len) {
-    char c1, c2, c3, c4;
-    if (sscanf(buf, "%c%c%c%c", &c1, &c2, &c3, &c4)) {
-      #ifdef REDROBOT_DEBUG
-        Serial.printf("[RR_Controller] '%c' '%c' '%c/%d' '%d'\n", c1, c2, c3, c3, c4);
-      #endif
+    if (len < 4) return false;
+    const char c1 = buf[0];
+    const char c2 = buf[1];
+    const char c3 = buf[2];
+    const char c4 = buf[3];
+    const bool buttonPressedDown = c4 == 1 || c4 == '1';
+    #ifdef REDROBOT_DEBUG
+      Serial.printf("[RR_Controller] '%c' '%c' '%c/%d' '%d'\n", c1, c2, c3, c3, c4);
+    #endif
 
-      if (c1 != '~')
-          return false;
+    if (c1 != '~') return false;
 
-      switch (c2) {
+    switch (c2) {
       case 'B':
         switch (c3) {
         case 'X':
-          ButtonX_Pressed((c4 == 1));
+          ButtonX_Pressed(buttonPressedDown);
           break;
         case 'Y':
-          ButtonY_Pressed((c4 == 1));
+          ButtonY_Pressed(buttonPressedDown);
           break;
         case 'B':
-          ButtonB_Pressed((c4 == 1));
+          ButtonB_Pressed(buttonPressedDown);
           break;
         case 'A':
-          ButtonA_Pressed((c4 == 1));
+          ButtonA_Pressed(buttonPressedDown);
           break;
         default:
           Serial.println("[BLE] Invalid speed command");
@@ -347,19 +350,19 @@ namespace RR_Controller {
       case 'D':
         switch (c3) {
         case 'U':
-          DPad_Pressed(UP, (c4 == 1));
+          DPad_Pressed(UP, buttonPressedDown);
           break;  
         case 'D':
-          DPad_Pressed(DOWN, (c4 == 1));
+          DPad_Pressed(DOWN, buttonPressedDown);
           break;  
         case 'L':
-          DPad_Pressed(LEFT, (c4 == 1));
+          DPad_Pressed(LEFT, buttonPressedDown);
           break;
         case 'R':
-          DPad_Pressed(RIGHT, (c4 == 1));
+          DPad_Pressed(RIGHT, buttonPressedDown);
           break;
         case 'C':
-          DPad_Pressed(CENTER, (c4 == 1));
+          DPad_Pressed(CENTER, buttonPressedDown);
           break;
         default:
             Serial.println("[BLE] Invalid speed command");
@@ -375,10 +378,6 @@ namespace RR_Controller {
       default:
         Serial.println("[BLE] Invalid speed command");
         return false;
-      }
-    } else {
-      Serial.println("[BLE] Invalid speed command");
-      return false;
     }
     return true;
   }
@@ -396,7 +395,7 @@ void ParseBluetoothCommands(char *buf, size_t len) {
   #ifdef REDROBOT_DEBUG
     Serial.printf("[Bluetooth] Received: \"%s\"\n", buf);
   #endif
-  if (!Bluefruit::Parse(buf, len));
+  if (!Bluefruit::Parse(buf, len))
     RR_Controller::Parse(buf, len);
 }
 
@@ -463,6 +462,10 @@ static void Brake() {
 
 void SetServo(uint8_t s, int16_t angle) {
     if (actuatorMutex) xSemaphoreTake(actuatorMutex, portMAX_DELAY);
+    if (in_remote_control.load() && xTaskGetCurrentTaskHandle() == arduinoLoopTask) {
+      if (actuatorMutex) xSemaphoreGive(actuatorMutex);
+      return;
+    }
     Servo::set(Servo::SERVO(s), angle);
     if (actuatorMutex) xSemaphoreGive(actuatorMutex);
 }

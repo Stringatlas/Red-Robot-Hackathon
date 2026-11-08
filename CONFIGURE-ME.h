@@ -12,20 +12,21 @@ constexpr bool kEnableMovement = true;
 
 // Lift: continuous rotation servo. Positive power raises the lift.
 constexpr uint8_t kLiftServoIndex = 3;
+constexpr int16_t kLiftNeutralAngle = 90;
 constexpr bool kLiftDirectionReversed = false;
 constexpr float kLiftFeedforward = 0.0f;
 
 // Claw: standard position servo. Adjust these angles for your mechanism.
 constexpr uint8_t kClawServoIndex = 1;
-constexpr int16_t kClawOpenAngle = 0;
-constexpr int16_t kClawClosedAngle = 180;
-constexpr int16_t kClawInitialAngle = 90;
+constexpr int16_t kClawOpenAngle = 110;
+constexpr int16_t kClawClosedAngle = 145;
+constexpr int16_t kClawInitialAngle = 120;
 
 // Wrist: standard position servo. Adjust these angles for your mechanism.
 constexpr uint8_t kWristServoIndex = 2;
-constexpr int16_t kWristUpAngle = 0;
-constexpr int16_t kWristDownAngle = 180;
-constexpr int16_t kWristInitialAngle = 90;
+constexpr int16_t kWristUpAngle = 140;
+constexpr int16_t kWristDownAngle = 50;
+constexpr int16_t kWristInitialAngle = 50;
 
 } // namespace RobotConfig
 

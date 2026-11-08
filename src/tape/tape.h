@@ -16,8 +16,8 @@ struct Sample {
 // Reset calibration and running sensor statistics.
 void Init();
 
-// Call once per update while stationary and centered on tape. Returns true
-// after a usable ground/tape distribution has been collected.
+// Call once per update while stationary. Completes after two samples, using a
+// ground-only baseline when no tape is under the center sensors.
 bool Calibrate();
 
 // Read the sensors and estimate tape position relative to the array center.

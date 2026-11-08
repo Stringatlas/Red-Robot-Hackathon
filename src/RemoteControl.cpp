@@ -1,5 +1,4 @@
 #include "../RedRobot.h"
-#include "../CONFIGURE-ME.h"
 #include "autonomous/autonomous.h"
 #include "claw/claw.h"
 #include "lift/lift.h"
@@ -11,7 +10,6 @@ namespace Bluefruit
 {
   enum class CalibrationTarget { Claw, Wrist };
   CalibrationTarget calibrationTarget = CalibrationTarget::Claw;
-  bool calibrationInitialized = false;
 
   void PrintCalibrationTelemetry()
   {
@@ -22,40 +20,25 @@ namespace Bluefruit
 
   void Button1_Pressed(bool buttonPressedDown)
   {
-    if (!buttonPressedDown || calibrationInitialized) return;
-
-    const bool clawReady = Claw::Init(RobotConfig::kClawServoIndex,
-                                      RobotConfig::kClawOpenAngle,
-                                      RobotConfig::kClawClosedAngle,
-                                      RobotConfig::kClawInitialAngle);
-    const bool wristReady = Wrist::Init(RobotConfig::kWristServoIndex,
-                                        RobotConfig::kWristUpAngle,
-                                        RobotConfig::kWristDownAngle,
-                                        RobotConfig::kWristInitialAngle);
-    calibrationInitialized = clawReady && wristReady;
-    if (calibrationInitialized)
-      PrintCalibrationTelemetry();
-    else
-      Serial.println("[Bluefruit calibration] servo initialization failed");
   }
 
   void Button2_Pressed(bool buttonPressedDown)
   {
-    if (!buttonPressedDown || !calibrationInitialized) return;
+    if (!buttonPressedDown) return;
     calibrationTarget = CalibrationTarget::Claw;
     PrintCalibrationTelemetry();
   }
 
   void Button3_Pressed(bool buttonPressedDown)
   {
-    if (!buttonPressedDown || !calibrationInitialized) return;
+    if (!buttonPressedDown) return;
     calibrationTarget = CalibrationTarget::Wrist;
     PrintCalibrationTelemetry();
   }
 
   void DPad_Pressed(button_t Button, bool buttonPressedDown)
   {
-    if (!buttonPressedDown || !calibrationInitialized) return;
+    if (!buttonPressedDown) return;
 
     const int16_t step = (Button == UP || Button == RIGHT) ? 5 : -5;
     const int16_t current = calibrationTarget == CalibrationTarget::Claw
@@ -79,9 +62,7 @@ namespace RR_Controller
   enum class ClawPosition { Initial, Open, Closed };
   enum class WristPosition { Initial, Up, Down };
 
-  ClawPosition clawPosition = ClawPosition::Initial;
   ClawPosition lastClawPosition = ClawPosition::Initial;
-  WristPosition wristPosition = WristPosition::Initial;
   WristPosition lastWristPosition = WristPosition::Initial;
 
   void Joystick1(int8_t x, int8_t y)
@@ -93,8 +74,13 @@ namespace RR_Controller
       RedRobot::WriteDCMotor(2, y);
     else
     {
-      int leftMotor = y + x;
-      int rightMotor = y - x;
+      // Soften small steering inputs near full forward/reverse. Full left/right
+      // still produces the original turning command.
+      const float turnScale = 1.0f - 0.5f * (abs(y) / 100.0f)
+                                      * (1.0f - abs(x) / 100.0f);
+      const int turn = roundf(x * turnScale);
+      int leftMotor = y + turn;
+      int rightMotor = y - turn;
 
       // Normalize to [-100, 100]
       int maxMagnitude = max(abs(leftMotor), abs(rightMotor));
@@ -128,7 +114,9 @@ namespace RR_Controller
     if (!buttonPressedDown) return;
 
     if (Button == UP && !RedRobot::IsRemoteControlled()) {
-      Autonomous::RequestStart();
+      Autonomous::RequestStart(Autonomous::Routine::Up);
+    } else if (Button == DOWN && !RedRobot::IsRemoteControlled()) {
+      Autonomous::RequestStart(Autonomous::Routine::Down);
     } else if (Button == LEFT && !RedRobot::IsRemoteControlled()) {
       Autonomous::RequestDriverControl();
     }
@@ -140,12 +128,11 @@ namespace RR_Controller
 
     if (lastClawPosition == ClawPosition::Open) {
       Claw::Close();
-      clawPosition = ClawPosition::Closed;
+      lastClawPosition = ClawPosition::Closed;
     } else {
       Claw::Open();
-      clawPosition = ClawPosition::Open;
+      lastClawPosition = ClawPosition::Open;
     }
-    lastClawPosition = clawPosition;
   }
 
   void ButtonY_Pressed(bool buttonPressedDown)
@@ -154,43 +141,24 @@ namespace RR_Controller
 
     if (lastWristPosition == WristPosition::Up) {
       Wrist::Down();
-      wristPosition = WristPosition::Down;
+      lastWristPosition = WristPosition::Down;
     } else {
       Wrist::Up();
-      wristPosition = WristPosition::Up;
+      lastWristPosition = WristPosition::Up;
     }
-    lastWristPosition = wristPosition;
   }
 
   void ButtonB_Pressed(bool buttonPressedDown)
   {
     if (!buttonPressedDown) return;
 
-    if (clawPosition != ClawPosition::Initial) {
-      Claw::GoToInitial();
-      clawPosition = ClawPosition::Initial;
-    } else if (lastClawPosition == ClawPosition::Open) {
-      Claw::Open();
-      clawPosition = ClawPosition::Open;
-    } else if (lastClawPosition == ClawPosition::Closed) {
-      Claw::Close();
-      clawPosition = ClawPosition::Closed;
-    }
+    Wrist::SetPosition(constrain(Wrist::Position() - 5, 0, 180));
   }
 
   void ButtonA_Pressed(bool buttonPressedDown)
   {
     if (!buttonPressedDown) return;
 
-    if (wristPosition != WristPosition::Initial) {
-      Wrist::GoToInitial();
-      wristPosition = WristPosition::Initial;
-    } else if (lastWristPosition == WristPosition::Up) {
-      Wrist::Up();
-      wristPosition = WristPosition::Up;
-    } else if (lastWristPosition == WristPosition::Down) {
-      Wrist::Down();
-      wristPosition = WristPosition::Down;
-    }
+    Wrist::SetPosition(constrain(Wrist::Position() + 5, 0, 180));
   }
 }

@@ -9,6 +9,7 @@ namespace {
 uint8_t servoIndex = 0;
 bool initialized = false;
 bool directionReversed = false;
+int16_t neutralAngle = 90;
 float gravityFeedforward = 0.0f;
 float requestedPower = 0.0f;
 
@@ -24,17 +25,17 @@ void WriteOutput() {
   float output = Clamp(requestedPower + gravityFeedforward, -1.0f, 1.0f);
   if (directionReversed) output = -output;
 
-  // This robot's modified servo is stationary at SetServo(90).
-  const int16_t angle = static_cast<int16_t>(lroundf(90.0f + 90.0f * output));
-  RedRobot::SetServo(servoIndex, angle);
+  const float angle = Clamp(neutralAngle + 90.0f * output, -180.0f, 180.0f);
+  RedRobot::SetServo(servoIndex, static_cast<int16_t>(lroundf(angle)));
 }
 
 } // namespace
 
-bool Init(uint8_t index, bool reversed, float feedforward) {
-  if (index > 3) return false;
+bool Init(uint8_t index, bool reversed, float feedforward, int16_t neutral) {
+  if (index > 3 || neutral < -180 || neutral > 180) return false;
   servoIndex = index;
   directionReversed = reversed;
+  neutralAngle = neutral;
   gravityFeedforward = Clamp(feedforward, 0.0f, 1.0f);
   requestedPower = 0.0f;
   initialized = true;
