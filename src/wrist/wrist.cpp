@@ -8,6 +8,7 @@ uint8_t servoIndex = 0;
 int16_t upAngle = 0;
 int16_t downAngle = 180;
 int16_t initialAngle = 90;
+int16_t position = 90;
 bool initialized = false;
 
 bool ValidAngle(int16_t angle) {
@@ -17,6 +18,7 @@ bool ValidAngle(int16_t angle) {
 void SetAngle(int16_t angle) {
   // SetServo(0) is a 1500 us pulse; standard servo 90 degrees is 1500 us.
   RedRobot::SetServo(servoIndex, angle - 90);
+  position = angle;
 }
 
 } // namespace
@@ -44,6 +46,16 @@ void Down() {
 
 void GoToInitial() {
   if (initialized) SetAngle(initialAngle);
+}
+
+bool SetPosition(int16_t angle) {
+  if (!initialized || !ValidAngle(angle)) return false;
+  SetAngle(angle);
+  return true;
+}
+
+int16_t Position() {
+  return position;
 }
 
 } // namespace Wrist

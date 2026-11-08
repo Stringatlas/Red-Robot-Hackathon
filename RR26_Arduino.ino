@@ -19,14 +19,6 @@ void setup() {
   Lift::Init(RobotConfig::kLiftServoIndex,
              RobotConfig::kLiftDirectionReversed,
              RobotConfig::kLiftFeedforward);
-  Claw::Init(RobotConfig::kClawServoIndex,
-             RobotConfig::kClawOpenAngle,
-             RobotConfig::kClawClosedAngle,
-             RobotConfig::kClawInitialAngle);
-  Wrist::Init(RobotConfig::kWristServoIndex,
-              RobotConfig::kWristUpAngle,
-              RobotConfig::kWristDownAngle,
-              RobotConfig::kWristInitialAngle);
   RedRobot::InitLineSensors();
   RedRobot::InitAuton();
   Tape::Init();

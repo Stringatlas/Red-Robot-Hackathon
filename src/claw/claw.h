@@ -11,5 +11,7 @@ bool Init(uint8_t servoIndex, int16_t openAngle, int16_t closedAngle,
 void Open();
 void Close();
 void GoToInitial();
+bool SetPosition(int16_t angle);
+int16_t Position();
 
 } // namespace Claw

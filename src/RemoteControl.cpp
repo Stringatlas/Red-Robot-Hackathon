@@ -1,4 +1,5 @@
 #include "../RedRobot.h"
+#include "../CONFIGURE-ME.h"
 #include "autonomous/autonomous.h"
 #include "claw/claw.h"
 #include "lift/lift.h"
@@ -8,19 +9,64 @@ bool useTankDrive = false; // set true to use separate joysticks for left/right 
 
 namespace Bluefruit
 {
+  enum class CalibrationTarget { Claw, Wrist };
+  CalibrationTarget calibrationTarget = CalibrationTarget::Claw;
+  bool calibrationInitialized = false;
+
+  void PrintCalibrationTelemetry()
+  {
+    Serial.printf("[Bluefruit calibration] selected=%s claw=%d deg wrist=%d deg\n",
+                  calibrationTarget == CalibrationTarget::Claw ? "claw" : "wrist",
+                  Claw::Position(), Wrist::Position());
+  }
+
   void Button1_Pressed(bool buttonPressedDown)
   {
-    // Button 1 starts the 20-second autonomous period from idle.
-    if (buttonPressedDown && !RedRobot::IsRemoteControlled())
-      Autonomous::RequestStart();
+    if (!buttonPressedDown || calibrationInitialized) return;
+
+    const bool clawReady = Claw::Init(RobotConfig::kClawServoIndex,
+                                      RobotConfig::kClawOpenAngle,
+                                      RobotConfig::kClawClosedAngle,
+                                      RobotConfig::kClawInitialAngle);
+    const bool wristReady = Wrist::Init(RobotConfig::kWristServoIndex,
+                                        RobotConfig::kWristUpAngle,
+                                        RobotConfig::kWristDownAngle,
+                                        RobotConfig::kWristInitialAngle);
+    calibrationInitialized = clawReady && wristReady;
+    if (calibrationInitialized)
+      PrintCalibrationTelemetry();
+    else
+      Serial.println("[Bluefruit calibration] servo initialization failed");
   }
 
   void Button2_Pressed(bool buttonPressedDown)
   {
+    if (!buttonPressedDown || !calibrationInitialized) return;
+    calibrationTarget = CalibrationTarget::Claw;
+    PrintCalibrationTelemetry();
   }
 
   void Button3_Pressed(bool buttonPressedDown)
   {
+    if (!buttonPressedDown || !calibrationInitialized) return;
+    calibrationTarget = CalibrationTarget::Wrist;
+    PrintCalibrationTelemetry();
+  }
+
+  void DPad_Pressed(button_t Button, bool buttonPressedDown)
+  {
+    if (!buttonPressedDown || !calibrationInitialized) return;
+
+    const int16_t step = (Button == UP || Button == RIGHT) ? 5 : -5;
+    const int16_t current = calibrationTarget == CalibrationTarget::Claw
+                                ? Claw::Position() : Wrist::Position();
+    const int16_t next = constrain(current + step, 0, 180);
+    if (calibrationTarget == CalibrationTarget::Claw)
+      Claw::SetPosition(next);
+    else
+      Wrist::SetPosition(next);
+
+    PrintCalibrationTelemetry();
   }
 
   void Button4_Pressed(bool buttonPressedDown)

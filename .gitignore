@@ -1,6 +1,4 @@
 .vscode/build/
 .vscode/intellisense/
 .vscode/c_cpp_properties.json
-docs
-output
 .DS_Store

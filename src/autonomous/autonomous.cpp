@@ -10,6 +10,7 @@ namespace Autonomous {
 namespace {
 
 constexpr unsigned long kAutonomousDurationMs = 20000;
+constexpr unsigned long kEarliestTapeFinishMs = 15000;
 constexpr uint8_t kSearchMotorSpeed = 25;
 constexpr unsigned long kLoopDelayMs = 20;
 
@@ -165,8 +166,11 @@ void Update() {
       if (sample.detected) {
         Drive::FollowTape(sample.positionMm);
         Serial.printf("Tape error: %.2f mm\n", sample.positionMm);
+      } else if (now - autonomousStartedAt >= kEarliestTapeFinishMs) {
+        FinishAutonomous();
       } else {
-        Enter(State::Parking);
+        // Cross an early gap or intersection without steering until tape returns.
+        Drive::SetTankSpeeds(kSearchMotorSpeed, kSearchMotorSpeed);
       }
       break;
     }
